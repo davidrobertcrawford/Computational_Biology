@@ -1,5 +1,5 @@
 # Computational_Biology
- This is normal text.
+Computational biology / bioinformatics example porfolio. All written by DRC with the exception of the AWK scripts.
 
 ## Snakemake Workflows
 These are designed to run on the NIH HPC (Biowulf set-up using SLURM). With a few modifications to the shell scripts and to the module commands (e.g. loading sratoolkit) these can be run on another system.
