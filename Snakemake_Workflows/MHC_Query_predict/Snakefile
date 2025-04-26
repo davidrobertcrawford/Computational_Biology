@@ -1,0 +1,83 @@
+### Snakefile for MHC_query_predict
+# input is tbls for peptides to run pvacBind on
+# output is pvacBind results for these
+
+from snakemake.utils import validate
+from os.path import join
+import pandas as pd
+
+configfile="../config/config_all.yaml"
+
+# Parameters
+
+letter_pair_df = (
+	pd.read_csv(config["letter_pairs"], sep="\t", dtype={"letter_pair":str}, encoding="utf8")
+	.set_index("letter_pair", drop=False)
+	.sort_index()
+)
+#validate(letter_pairs, schema="../schemas/letter_pairs.schema.yaml")
+
+LETTER_PAIRS=letter_pair_df["letter_pair"].tolist()
+LETTER_PAIRS.append("LI")
+
+
+TD={"target", "decoy"}
+
+KVALS=range(8,16)
+
+## Replace with config pulls
+HLA_TYPE="HLA-A*02:05,HLA-A*03:01,HLA-B*07:02,HLA-B*40:32,HLA-C*06:02,HLA-C*07:02"
+PROJECT="YSA_IFN_TRP"
+CELL_LINE="MD55A3"
+
+DATA_DIR=config["dir"]["data_dir"]
+HOME_DIR=config["dir"]["home_dir"]
+
+# Utilities
+R_ADD_LABELS=join(HOME_DIR, "utilities_R/add_labels_to_tbl_CL.R")
+AWK_TBL_TO_FASTA=join(HOME_DIR, "utilities_AWK/TblToFasta.awk")
+
+# Directories
+PROJECT_DIR=join(DATA_DIR,"MHC_DB")
+OUTPUT_DIR=join(PROJECT_DIR, "Output")
+MEMBER_OUTPUT_DIR=join(OUTPUT_DIR, "{project}", "{letter_pair}", "{td}", "{kval}")
+
+# Input files
+PEPTIDE_FILE=join(DATA_DIR, "Query_Process", "Output", "{project}", "{letter_pair}", "{td}", "peptides_{kval}_shuf.tbl")
+
+# Output files
+MEMBER_OUT_ALL=join(MEMBER_OUTPUT_DIR, "MHC_Class_I/{cell_line}.all_epitopes.tsv")
+MEMBER_OUT_FILT=join(MEMBER_OUTPUT_DIR, "MHC_Class_I/{cell_line}.filtered.tsv")
+
+
+rule all:
+
+	input:
+		expand(MEMBER_OUT_ALL, project=PROJECT, letter_pair=LETTER_PAIRS, kval=KVALS, td=TD, cell_line=CELL_LINE),	
+		expand(MEMBER_OUT_FILT, project=PROJECT, letter_pair=LETTER_PAIRS, kval=KVALS, td=TD, cell_line=CELL_LINE)
+		
+rule run_pvacBind:
+	input:
+		input1=PEPTIDE_FILE
+	params:
+		param1=MEMBER_OUTPUT_DIR,
+		param2="./for_pvac.tbl",
+		param3="./for_pvac.fasta"
+	output:
+		output3=MEMBER_OUT_ALL,
+		output4=MEMBER_OUT_FILT
+	shell:
+		"cd /lscratch/$SLURM_JOB_ID && " 
+		"module load R/4.0 && "
+		"Rscript {R_ADD_LABELS} {input.input1} {params.param2} && "
+		"awk -f {AWK_TBL_TO_FASTA} {params.param2} > {params.param3} && "
+		"mkdir /lscratch/$SLURM_JOB_ID/IEDB && "
+        "cp /data/crawforddar/transfid_snakemake/IEDB_MHC_I-3.1.4.tar.gz /lscratch/$SLURM_JOB_ID/IEDB && "
+		"cd IEDB && "
+        "tar -zxf IEDB_MHC_I-3.1.4.tar.gz && "
+        "cd mhc_i && "
+        "./configure && "
+        "cd /lscratch/$SLURM_JOB_ID && "
+		"module load pvactools/3.0.1 && "
+		"pvacbind run {params.param3} {wildcards.cell_line} {HLA_TYPE} NetMHC MHCflurry . -e1 {wildcards.kval} --iedb-install-directory /lscratch/$SLURM_JOB_ID/IEDB --n-threads 28 && "
+		"cp -r ./MHC_Class_I {params.param1} "

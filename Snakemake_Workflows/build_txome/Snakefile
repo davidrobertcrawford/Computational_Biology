@@ -1,0 +1,78 @@
+### Build transcriptome from SKCM RNA-seq files using StringTie2 
+
+from os.path import join
+import pandas as pd
+
+# Directories
+MASTER_DIR="/data/crawforddar/TCGA_SKCM_transcriptome"
+OUTPUT_DIR=join(MASTER_DIR, "Output_v43")
+DATA_DIR=join(MASTER_DIR, "Data")
+FASTQ_DIR=join(MASTER_DIR, "FastQ")
+INTERMED_DIR=join(MASTER_DIR, "Intermediate_v43")
+SAMPLE_INTERMED_DIR=join(INTERMED_DIR, "{sample}")
+SAMPLE_OUTPUT_DIR=join(OUTPUT_DIR, "{sample}")
+
+
+# Input Files
+SAMPLES_FILE=join(DATA_DIR, "skcm_file_list.txt")
+ADAPTER_FILE="TruSeq3-PE.fa"
+REFERENCE_GTF="/data/crawforddar/transfid_snakemake/gencode_v43/gencode.v43.annotation.gtf"
+
+# Intermediate Files
+FASTQ_1=join(FASTQ_DIR, "{sample}_R1.fq")
+FASTQ_2=join(FASTQ_DIR, "{sample}_R2.fq")
+
+SAMPLE_SAM=join(SAMPLE_INTERMED_DIR, "{sample}.sam")
+SAMPLE_SORTED_BAM=join(SAMPLE_INTERMED_DIR, "{sample}_sorted.bam")
+
+
+# Output Files
+SAMPLE_TX=join(SAMPLE_OUTPUT_DIR, "{sample}_tx.gtf")
+
+SAMPLE=pd.read_csv(SAMPLES_FILE, sep="\t")["sample"]#[1:150]
+
+rule all:
+    input:
+        expand(SAMPLE_TX, sample=SAMPLE),
+	expand(SAMPLE_SORTED_BAM, sample=SAMPLE)
+
+rule hisat2:
+	input:
+		input1=FASTQ_1,
+		input2=FASTQ_2
+	output:
+		output1=SAMPLE_SAM
+	shell:
+		"module load hisat2/2.2.1 && "
+		"hisat2 -p 16 -x $HISAT_INDEXES/hg38/genome --no-softclip --dta --rna-strandness RF -1 {input.input1} -2 {input.input2} -S {output.output1}"
+
+### 16 cores and 32G worked fine [15min, used <8GB]
+### hisat2 -p 16 -x $HISAT_INDEXES/hg19/genome --dta -1 {input.input1} -2 {input.input2} -S {output.output1}"
+
+
+# for this we used 16 cores and 32GB for the sam for less than 12 minutes
+
+rule sambam:
+	input:
+		input1=SAMPLE_SAM
+	params:
+
+	output:
+		output1=SAMPLE_SORTED_BAM
+	shell:
+		"module load samtools/1.15 && "
+		"samtools view -T /lscratch/$SLURM_JOB_ID -@15 -Su {input.input1} | samtools sort -T /lscratch/$SLURM_JOB_ID -@15 -O BAM -o {output.output1} && "
+		"rm {input.input1} "
+
+
+## looks like stringtie for the first go is happy with 4cores and 4GB or less; took 30 minutes
+
+rule st1:
+	input:
+		input1=SAMPLE_SORTED_BAM,
+		input2=REFERENCE_GTF
+	output:
+		output1=SAMPLE_TX
+	shell:
+		"module load stringtie/2.1.5 && "
+		"stringtie -G {input.input2} -o {output.output1} -p 4 -f 0 -m 100 {input.input1} "

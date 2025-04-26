@@ -1,0 +1,19 @@
+# cluster.json for grid_search
+{
+"__default__" :
+{
+"time" : "08:00:00",
+"mem" : "16g",
+"nthreads" : 4,
+"gres" : "lscratch:32"
+},
+
+"run_MQ_here" :
+{
+"time" : "36:00:00",
+"mem" : "192G", # 32
+"nthreads" : 12, # 4
+"gres" : "lscratch:64"
+},
+
+}

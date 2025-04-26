@@ -1,0 +1,67 @@
+## Snakefile to run standard HLA-pep MQ on databases using randomization and revert @ FDR methods
+# 2020_10_28
+
+# Input is pre-built fasta databases with proteins, raw MS files, and mqpar.xml files.
+
+from os.path import join
+import pandas as pd
+
+# Directories
+MS_RAW_DIR="/data/crawforddar/MS_RAW_plus_XML"
+DB_DIR="/data/crawforddar/neopeptide_db"
+DB_ORIG=join(DB_DIR, "{sample}_{db1}_{db2}.fasta")
+DB_DIR_sample_db1_db2=join(DB_DIR, "{sample}_{db1}_{db2}")
+
+DB_FILE_size_round="/data/crawforddar/neopeptide_db/test/{method}_{protein}.fasta"
+
+RESULTS_FILE_INDIV="combined/txt/peptides.txt"
+RESULTS_DIR_TOTAL="/data/crawforddar/MQ_grid_pipeline_results/test"
+RESULTS_DIR_INDIV=join(RESULTS_DIR_TOTAL, "{sample}_{method}_{fdr_style}_{protein}_{range}")
+RESULTS_DIR_INDIV_DONE=join(RESULTS_DIR_INDIV, "peptides.txt")
+
+METHOD=["Kalaora","Laumont"]
+PROTEIN=["Uniprot","RefSeq"]
+RANGE=["0812","0720"]
+FDR_STYLE=["randomize","revert"]
+
+MQ_PAR_FDR="/data/crawforddar/MS_RAW_plus_XML/mqpar_enzyme5_{fdr_style}_{range}.xml"
+
+
+# Rules
+rule all:
+	input:
+		expand("/data/crawforddar/CDSL_pipeline_results/CDSL_test/{sample}_{method}_{fdr_style}_{protein}_{range}/peptides.txt",
+		sample="12Tall",
+		range=RANGE,
+		method=METHOD,
+		protein=PROTEIN,
+		fdr_style=FDR_STYLE
+)
+
+	
+rule run_MQ_here:
+	input:
+		input1=DB_FILE_size_round,
+		input2=MQ_PAR_FDR
+	
+	params:
+		param1=MS_RAW_DIR,
+		param2=RESULTS_DIR_INDIV
+	
+	output:
+		output1=RESULTS_DIR_INDIV_DONE
+	
+	shell:
+		"export TMPDIR=/lscratch/$SLURM_JOB_ID && "
+		"cd /lscratch/$SLURM_JOB_ID && "
+		"cp {params.param1}/12T1.raw . && "
+		"cp {params.param1}/12T2.raw . && "
+		"cp {params.param1}/12T3.raw . && "
+		"cp {params.param1}/12T4.raw . && "
+		"cp {params.param1}/12T5.raw . && "
+		"cp {input.input2} ./mqpar.xml && "
+		"""sed -i "s/thisid/$SLURM_JOB_ID/g" mqpar.xml && """
+		"cp {input.input1} search_db.fasta && "
+		"module load maxquant/1.6.17.0 && "
+		"MaxQuantCmd.exe mqpar.xml && "
+		"cp combined/txt/* {params.param2}/ "

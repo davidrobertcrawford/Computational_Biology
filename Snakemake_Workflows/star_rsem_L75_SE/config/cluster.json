@@ -1,0 +1,35 @@
+# cluster.json for peptide_hunt
+{
+"__default__" :
+{
+"time" : "08:00:00",
+"mem" : "16g",
+"nthreads" : 4,
+"lscratch" : 1
+},
+
+"get_fastq" :
+{
+"time" : "00:30:00",
+"mem" : "32g",
+"nthreads" : 6,
+"lscratch" : 100
+},
+
+"QC_trim" :
+{
+"time" : "01:00:00",
+"mem" : "32G",
+"nthreads" : 4,
+"lscratch" : 1 
+},
+
+"star_rsem" :
+        {
+                "time" : "03:00:00",
+                "mem" : "64g",
+                "nthreads" : 24,
+                "lscratch" : 1
+        },
+
+}

@@ -1,0 +1,75 @@
+# Snakefile for star_rsem_L75_SE
+
+# Quantify RNA-seq using STAR-RSEM pipeline (as used by XENA TCGA)
+# For Single-End 75-base reads
+
+# Input: SRA data for RNA-seq files
+# OUtput: Gene and isoform level quantification results for each sample
+
+from os.path import join
+import pandas as pd
+
+# Directories
+MASTER_DIR="/data/crawforddar/star_rsem_FILES"
+OUTPUT_DIR=join(MASTER_DIR, "Output")
+DATA_DIR=join(MASTER_DIR, "Data")
+FASTQ_DIR=join(MASTER_DIR, "FastQ")
+FASTQ_DIR_SAMPLE=join(FASTQ_DIR, "{sample}")
+SAMPLE_OUTPUT_DIR=join(OUTPUT_DIR, "{sample}")
+
+
+# Input Files
+SAMPLES_FILE=join(DATA_DIR, "GSE63180_SRR-Acc-List.txt")
+#ADAPTER_FILE="TruSeq3-SE.fa"
+
+
+# Intermediate Files
+INDEX_FILE="/data/crawforddar/gencode_M25/M25/M25"
+FASTQ_1=join(FASTQ_DIR_SAMPLE, "{sample}.fastq")
+FASTQ_1_QC=join(FASTQ_DIR_SAMPLE, "{sample}_qc.fastq")
+
+
+# Output Files
+SAMPLE_GENE_RESULTS=join(SAMPLE_OUTPUT_DIR, "{sample}.genes.results")
+SAMPLE_ISOFORM_RESULTS=join(SAMPLE_OUTPUT_DIR, "{sample}.isoforms.results")
+
+
+SAMPLE=pd.read_csv(SAMPLES_FILE, sep="\t")["sample"]
+
+rule all:
+    input:
+        expand(SAMPLE_GENE_RESULTS, sample=SAMPLE),
+        expand(SAMPLE_ISOFORM_RESULTS, sample=SAMPLE)
+
+rule get_fastq:
+	output:
+		output1=FASTQ_1
+	params:
+		param1=FASTQ_DIR_SAMPLE,
+	shell:
+		"cd {params.param1} && "
+		"module load sratoolkit && "
+		"fasterq-dump {wildcards.sample} "
+
+rule QC_trim:
+	input:
+		input1=FASTQ_1 
+	output:
+		output1=FASTQ_1_QC
+	shell:
+		"module load trimmomatic/0.39 &&"
+  		"java -jar $TRIMMOJAR SE -phred33 -threads 4 {input.input1} {output.output1} ILLUMINACLIP:/usr/local/apps/trimmomatic/Trimmomatic-0.39/adapters/TruSeq3-SE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:20 MINLEN:33"
+
+rule star_rsem:
+	input:
+		input1=FASTQ_1_QC,
+	params:
+		param1=SAMPLE_OUTPUT_DIR
+	output:
+		output1=SAMPLE_GENE_RESULTS,
+		output2=SAMPLE_ISOFORM_RESULTS
+	shell:
+		"module load STAR && "
+		"module load rsem && "
+		"cd {params.param1} && "
+		"rsem-calculate-expression --num-threads 24 --star {input.input1} {INDEX_FILE} {wildcards.sample} "
