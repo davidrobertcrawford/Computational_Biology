@@ -10,5 +10,4 @@ snakemake \
 --keep-going \
 --max-jobs-per-second 1 \
 --max-status-checks-per-second 0.1 \
---rerun-incomplete \
--s snakemake_MHC_Query.snake
+--rerun-incomplete
